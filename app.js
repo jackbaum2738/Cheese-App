@@ -266,6 +266,7 @@ function hideOverlay() {
   bags.overlay.clear();
   form = null;
   $('#main').inert = false;
+  if (updatePending) applyUpdate();
 }
 
 function route() {
@@ -724,6 +725,7 @@ function downloadFile(file) {
 }
 
 async function exportBackup(downloadOnly) {
+  saving = true;
   const btns = document.querySelectorAll('[data-act="export"],[data-act="export-download"]');
   btns.forEach((b) => (b.disabled = true));
   try {
@@ -744,6 +746,8 @@ async function exportBackup(downloadOnly) {
     toast('Could not create the backup.');
   } finally {
     btns.forEach((b) => (b.disabled = false));
+    saving = false;
+    if (updatePending) applyUpdate();
   }
 }
 
@@ -792,6 +796,11 @@ async function cleanBackup(data) {
 }
 
 async function importBackup(file) {
+  saving = true;   // blocks a pending update-reload until the restore has finished
+  try { await importBackupFile(file); }
+  finally { saving = false; if (updatePending) applyUpdate(); }
+}
+async function importBackupFile(file) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch (e) { return toast('That file isn’t a Cheese backup.'); }
@@ -897,6 +906,17 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => { state.installPrompt = null; renderTried(); });
 
+/* ---------- Updates ---------- */
+
+// When a new version of the app has been installed, reload into it. If you are in the middle of
+// editing or restoring a backup, wait until that is finished so nothing is lost.
+let updatePending = false;
+function applyUpdate() {
+  if (form || saving) { updatePending = true; return; }
+  try { sessionStorage.setItem('cheese-updated', '1'); } catch (e) { /* ignore */ }
+  location.reload();
+}
+
 /* ---------- Start ---------- */
 
 function showFatal(message) {
@@ -936,7 +956,18 @@ async function boot() {
       .catch(() => {});
   }
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Offline mode unavailable', e));
+    // On the very first visit the worker also takes control; only reload for real updates.
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) applyUpdate(); });
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      // Look for a new version each time the app comes back to the foreground.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    }).catch((e) => console.warn('Offline mode unavailable', e));
   }
+  try {
+    if (sessionStorage.getItem('cheese-updated')) { sessionStorage.removeItem('cheese-updated'); toast('Updated to the latest version'); }
+  } catch (e) { /* ignore */ }
 }
 boot();

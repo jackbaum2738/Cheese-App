@@ -41,7 +41,7 @@ Settings shows how long ago your last backup was and turns yellow after 14 days.
 
 ## Updating the app
 
-After changing any file, edit `VERSION` at the top of `sw.js` (for example `v1` to `v2`) so phones fetch the new files. Open the app once to pick up the update, and a second time to see it.
+After changing any file, edit `VERSION` at the top of `sw.js` (for example `v3` to `v4`). Phones that have the app installed notice the new version when they open it or come back to it, download it, and reload into it automatically. If you are in the middle of editing a cheese, the reload waits until you have finished. You'll see "Updated to the latest version" afterwards.
 
 ## Files
 
