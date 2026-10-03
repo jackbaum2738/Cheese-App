@@ -2,7 +2,7 @@
 
 /* Service worker: makes Cheese work offline.
    Bump VERSION whenever you change any app file, so phones fetch the new files. */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `cheese-${VERSION}`;
 
 // All paths are relative to this file, so this works from any GitHub Pages subpath.
