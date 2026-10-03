@@ -413,12 +413,16 @@ async function deleteTried(id) {
 function photoAreaHTML() {
   if (form.busy) return '<div class="photo-pick" aria-busy="true">Processing photo…</div>';
   if (!form.photo) {
-    return `<button type="button" class="photo-pick" data-act="add-photo">${icon('camera')}Add photo<small>Take one or choose from your library</small></button>`;
+    return `<div class="photo-row">
+      <button type="button" class="photo-pick" data-act="take-photo">${icon('camera')}Take photo</button>
+      <button type="button" class="photo-pick" data-act="choose-photo">${icon('image')}Choose photo</button>
+    </div>`;
   }
   if (!form.preview) form.preview = bags.overlay.url(form.photo);
   return `<div class="photo-has"><img src="${form.preview}" alt="Your photo">
     <div class="chips">
-      <button type="button" data-act="add-photo">${icon('camera')}Change</button>
+      <button type="button" data-act="take-photo">${icon('camera')}Retake</button>
+      <button type="button" data-act="choose-photo">${icon('image')}Choose</button>
       <button type="button" data-act="remove-photo">Remove</button>
     </div></div>`;
 }
@@ -823,7 +827,8 @@ async function importBackup(file) {
 
 const actions = {
   back: (el) => back(el.dataset.fallback || '#/tried'),
-  'add-photo': () => $('#photo-input').click(),
+  'take-photo': () => $('#camera-input').click(),
+  'choose-photo': () => $('#photo-input').click(),
   'remove-photo': () => { if (form) { form.photo = null; form.thumb = null; form.preview = null; renderPhotoArea(); } },
   rate: (el) => {
     if (!form) return;
@@ -870,7 +875,7 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
-  if (e.target.id === 'photo-input') handlePhotoChosen(e.target);
+  if (e.target.id === 'photo-input' || e.target.id === 'camera-input') handlePhotoChosen(e.target);
   else if (e.target.id === 'import-input') {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -899,10 +904,14 @@ function showFatal(message) {
 }
 
 async function boot() {
-  // The photo picker lives outside the pages so it survives redraws.
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = 'image/*'; input.id = 'photo-input'; input.hidden = true;
-  document.body.appendChild(input);
+  // The photo pickers live outside the pages so they survive redraws.
+  // One opens the camera directly, the other the photo library or files.
+  for (const [id, capture] of [['photo-input', false], ['camera-input', true]]) {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.id = id; input.hidden = true;
+    if (capture) input.setAttribute('capture', 'environment');
+    document.body.appendChild(input);
+  }
 
   try {
     await loadMeta();
