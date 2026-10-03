@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cheese</title>
+  <meta name="description" content="A personal cheese journal.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#FBF6EA" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#19150F" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cheese">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="wedge" viewBox="0 0 64 64">
+      <ellipse cx="33" cy="57" rx="27" ry="3.2" style="fill:var(--ink);opacity:.1"/>
+      <polygon points="5,35 47,13 59,26" style="fill:var(--top,#F8D978)"/>
+      <polygon points="5,35 59,26 59,49 5,55" style="fill:var(--body,#F2C24F)"/>
+      <circle cx="21" cy="44" r="3.2" style="fill:var(--hole,rgba(140,90,20,.28))"/>
+      <circle cx="36" cy="40" r="4.2" style="fill:var(--hole,rgba(140,90,20,.28))"/>
+      <circle cx="49" cy="46" r="2.6" style="fill:var(--hole,rgba(140,90,20,.28))"/>
+      <circle cx="31" cy="49.5" r="1.8" style="fill:var(--hole,rgba(140,90,20,.28))"/>
+      <circle cx="35" cy="26" r="2.2" style="fill:var(--hole,rgba(140,90,20,.28))"/>
+      <path d="M47 13 L59 26 L59 49" style="fill:none;stroke:var(--rind,#9C6B2E);stroke-width:4;stroke-linejoin:round"/>
+    </symbol>
+    <symbol id="star" viewBox="0 0 24 24"><path d="M12 2.6l2.85 5.95 6.5.85-4.75 4.55 1.2 6.45L12 17.3l-5.8 3.1 1.2-6.45L2.65 9.4l6.5-.85z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8.5a2 2 0 0 1 2-2h2.5L9 4.5h6l1.5 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" style="fill:currentColor;stroke:none"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-checkc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.6"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 20V9M7 13.5l5-5 5 5M5 4h14"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5h4"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  </defs>
+</svg>
+
+<noscript><p style="padding:24px">Cheese needs JavaScript to run.</p></noscript>
+
+<div id="main">
+  <!-- Tried -->
+  <section class="screen" id="screen-tried" aria-labelledby="h-tried">
+    <header class="top">
+      <div class="appbar">
+        <h1 id="h-tried">Tried</h1>
+        <button class="iconbtn" data-go="#/settings" aria-label="Settings"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg></button>
+      </div>
+      <label class="search">
+        <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="search" type="search" placeholder="Search name or notes" autocomplete="off" autocapitalize="off" enterkeyhint="search" aria-label="Search tried cheeses">
+      </label>
+      <div class="seg" role="group" aria-label="Sort order">
+        <button type="button" data-sort="date" aria-pressed="true">Newest</button>
+        <button type="button" data-sort="rating" aria-pressed="false">Top rated</button>
+      </div>
+    </header>
+    <div class="scroll" id="tried-list"></div>
+    <button class="fab" data-go="#/tried/new"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add cheese</button>
+  </section>
+
+  <!-- Want to try -->
+  <section class="screen" id="screen-want" aria-labelledby="h-want" hidden>
+    <header class="top">
+      <div class="appbar">
+        <h1 id="h-want">Want to try</h1>
+        <button class="iconbtn" data-go="#/settings" aria-label="Settings"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg></button>
+      </div>
+    </header>
+    <div class="scroll" id="want-list"></div>
+    <button class="fab" data-go="#/want/new"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add cheese</button>
+  </section>
+
+  <nav class="nav" aria-label="Main">
+    <button data-tab="tried" aria-current="page"><span><svg class="i" aria-hidden="true"><use href="#i-checkc"/></svg></span>Tried</button>
+    <button data-tab="want"><span><svg class="i" aria-hidden="true"><use href="#i-bookmark"/></svg></span>Want to try</button>
+  </nav>
+</div>
+
+<!-- Full-screen pages (forms, detail, settings) are drawn in here -->
+<div id="overlay" class="overlay" hidden></div>
+<div id="sheet-root" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js" defer></script>
+</body>
+</html>
