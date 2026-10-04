@@ -326,14 +326,14 @@ details.more .form { padding-top: 6px; }
   position: absolute; left: 50%; top: 44%; width: min(calc(100vw - 48px), 62vh); aspect-ratio: 1; transform: translate(-50%, -50%);
   border-radius: 6px; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .58); pointer-events: none;
 }
-.cam-frame::before, .cam-frame::after { content: ""; position: absolute; inset: 0; border-radius: 6px; background-repeat: no-repeat; }
-.cam-frame::before {
+.cam-frame::before, .cam-frame::after, .crop-frame::before, .crop-frame::after { content: ""; position: absolute; inset: 0; border-radius: 6px; background-repeat: no-repeat; }
+.cam-frame::before, .crop-frame::before {
   background-image: linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff),
     linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff);
   background-size: 26px 3px, 3px 26px, 26px 3px, 3px 26px, 26px 3px, 3px 26px, 26px 3px, 3px 26px;
   background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right;
 }
-.cam-frame::after {
+.cam-frame::after, .crop-frame::after {
   background-image: linear-gradient(rgba(255,255,255,.25), rgba(255,255,255,.25)), linear-gradient(rgba(255,255,255,.25), rgba(255,255,255,.25)),
     linear-gradient(rgba(255,255,255,.25), rgba(255,255,255,.25)), linear-gradient(rgba(255,255,255,.25), rgba(255,255,255,.25));
   background-size: 1px 100%, 1px 100%, 100% 1px, 100% 1px;
@@ -370,3 +370,16 @@ details.more .form { padding-top: 6px; }
 .cam-sheet .cam-act { background: #2F281D; border-color: #3A3226; color: #F6EEDC; }
 .cam-sheet .cam-act.primary { background: #F5C02E; color: #19150F; border-color: transparent; }
 .cam-sheet .cam-act.quiet { background: none; border: 0; color: #B9A787; }
+
+/* ---------- Crop screen (dark, like the camera) ---------- */
+.cropper { position: fixed; inset: 0; z-index: 35; background: #000; color: #fff; display: flex; flex-direction: column; }
+.crop-top { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: calc(var(--safe-top) + 8px) var(--gutter-r) 8px var(--gutter-l); }
+.crop-title { font-weight: 700; font-size: 17px; }
+.crop-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; background: #000; cursor: grab; outline: none; -webkit-user-select: none; user-select: none; }
+.crop-stage.grab { cursor: grabbing; }
+.crop-stage img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; will-change: transform; -webkit-user-drag: none; }
+.crop-frame { position: absolute; border-radius: 6px; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .62); pointer-events: none; }
+.crop-loading { position: absolute; inset: 0; display: grid; place-items: center; color: #B9A787; font-weight: 600; }
+.crop-note { flex: none; text-align: center; font-size: 14px; color: rgba(255, 255, 255, .8); padding: 10px 16px 4px; }
+.crop-actions { flex: none; display: grid; grid-template-columns: 1fr 1.5fr; gap: 12px; padding: 8px var(--gutter-r) calc(24px + var(--safe-bottom)) var(--gutter-l); }
+.cam-act[disabled] { opacity: .6; }

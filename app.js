@@ -435,21 +435,199 @@ function renderPhotoArea() {
 async function handlePhotoChosen(input) {
   const file = input.files && input.files[0];
   input.value = '';
-  const f = form;
-  if (!file || !f) return;
-  dismissCamera();
-  f.busy = true;
-  renderPhotoArea();
+  if (!file || !form) return;
+  openCropper(file);   // you choose which square to keep before it is saved
+}
+
+/* ---------- Crop screen ----------
+   Photos from the library (or the phone's camera app) open here first: drag the photo under a square
+   frame and pinch to zoom, and the part inside the frame is what gets saved. */
+
+const crop = { open: false, url: null, img: null, view: null, saving: false };
+
+function refreshInert() {
+  const overlayOpen = !$('#overlay').hidden;
+  $('#main').inert = overlayOpen || cam.open || crop.open;
+  $('#overlay').inert = cam.open || crop.open;
+  $('#camera').inert = crop.open;
+}
+
+/** Close whichever layers are no longer wanted after the history entry changed. */
+function syncLayers(st) {
+  const layer = st && st.layer;
+  if (layer !== 'crop' && crop.open) closeCropper();
+  if (layer !== 'crop' && layer !== 'cam' && cam.open) closeCamera();
+}
+
+function openCropper(file) {
+  if (crop.open) return;
+  crop.open = true; crop.saving = false;
+  const el = $('#cropper');
+  el.innerHTML = `<div class="crop-top">
+      <button type="button" class="cam-btn" data-crop="cancel" aria-label="Cancel">${icon('x')}</button>
+      <span class="crop-title">Move and zoom</span><span></span>
+    </div>
+    <div class="crop-stage" id="crop-stage" tabindex="0" aria-label="Photo. Drag to move, pinch to zoom.">
+      <img id="crop-img" alt="" draggable="false">
+      <div class="crop-frame" id="crop-frame"></div>
+      <p class="crop-loading" id="crop-loading">Loading photo…</p>
+    </div>
+    <p class="crop-note">Drag to move. Pinch to zoom. Double-tap to zoom in or out.</p>
+    <div class="crop-actions">
+      <button type="button" class="cam-act" data-crop="cancel">Cancel</button>
+      <button type="button" class="cam-act primary" data-crop="use" id="crop-use" disabled>${icon('check')}Use photo</button>
+    </div>`;
+  el.hidden = false;
+  refreshInert();
+  const d = (history.state && history.state.d) || 0;
+  history.pushState({ d: d + 1, layer: 'crop' }, '', location.href);
+  crop.url = URL.createObjectURL(file);
+  const img = $('#crop-img');
+  crop.img = img;
+  img.onload = () => { $('#crop-loading').hidden = true; startCrop(img); };
+  img.onerror = () => { toast('That photo could not be read.'); dismissCropper(); };
+  img.src = crop.url;
+  $('#crop-stage').focus();
+}
+
+function startCrop(img) {
+  const stage = $('#crop-stage');
+  const v = crop.view = { nw: img.naturalWidth, nh: img.naturalHeight, s: 1, tx: 0, ty: 0, min: 1, max: 1, F: { x: 0, y: 0, side: 0 }, sw: 0, sh: 0 };
+  img.style.width = v.nw + 'px'; img.style.height = v.nh + 'px';
+  fitCrop();
+  const apply = () => { clampCrop(); img.style.transform = `translate(${v.tx}px, ${v.ty}px) scale(${v.s})`; };
+  crop.apply = apply;
+  apply();
+  $('#crop-use').disabled = false;
+
+  const pts = new Map();
+  let tap = null, lastTap = null;
+  const local = (e) => { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  stage.onpointerdown = (e) => {
+    try { stage.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or finished pointer */ }
+    pts.set(e.pointerId, local(e));
+    tap = pts.size === 1 ? { t: Date.now(), ...local(e), moved: 0 } : null;
+    stage.classList.add('grab');
+  };
+  stage.onpointermove = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = [...pts.values()];
+    const cur = local(e), old = pts.get(e.pointerId);
+    pts.set(e.pointerId, cur);
+    if (pts.size === 1) {
+      v.tx += cur.x - old.x; v.ty += cur.y - old.y;
+      if (tap) tap.moved += Math.abs(cur.x - old.x) + Math.abs(cur.y - old.y);
+    } else if (pts.size === 2) {
+      tap = null;
+      const now = [...pts.values()];
+      const mid = (a) => ({ x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 });
+      const dist = (a) => Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1;
+      const m0 = mid(prev), m1 = mid(now);
+      zoomCrop(dist(now) / dist(prev), m0.x, m0.y);
+      v.tx += m1.x - m0.x; v.ty += m1.y - m0.y;
+    }
+    apply();
+  };
+  const release = (e) => {
+    if (!pts.delete(e.pointerId)) return;
+    if (pts.size === 0) stage.classList.remove('grab');
+    if (e.type === 'pointerup' && tap && pts.size === 0 && tap.moved < 10 && Date.now() - tap.t < 300) {
+      if (lastTap && tap.t - lastTap.t < 350 && Math.hypot(tap.x - lastTap.x, tap.y - lastTap.y) < 40) {
+        // double-tap: zoom in, or back out if already zoomed
+        if (v.s > v.min * 1.05) { v.s = v.min; centreCrop(); } else zoomCrop(2.5, tap.x, tap.y);
+        apply(); lastTap = null;
+      } else lastTap = tap;
+    }
+    tap = null;
+  };
+  stage.onpointerup = release; stage.onpointercancel = release;
+  stage.onwheel = (e) => { e.preventDefault(); const p = local(e); zoomCrop(Math.exp(-e.deltaY * 0.002), p.x, p.y); apply(); };
+  stage.onkeydown = (e) => {   // keyboard and screen-reader friendly
+    const step = 24;
+    const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+    if (moves[e.key]) { v.tx += moves[e.key][0]; v.ty += moves[e.key][1]; }
+    else if (e.key === '+' || e.key === '=') zoomCrop(1.15, v.F.x + v.F.side / 2, v.F.y + v.F.side / 2);
+    else if (e.key === '-') zoomCrop(1 / 1.15, v.F.x + v.F.side / 2, v.F.y + v.F.side / 2);
+    else return;
+    e.preventDefault(); apply();
+  };
+}
+
+/** Size the frame to the screen and show the whole short side of the photo, centred. */
+function fitCrop() {
+  const v = crop.view, stage = $('#crop-stage'), frame = $('#crop-frame');
+  const r = stage.getBoundingClientRect();
+  v.sw = r.width; v.sh = r.height;
+  const side = Math.max(120, Math.floor(Math.min(r.width - 48, r.height - 24)));
+  v.F = { x: Math.round((r.width - side) / 2), y: Math.round((r.height - side) / 2), side };
+  frame.style.cssText = `left:${v.F.x}px;top:${v.F.y}px;width:${side}px;height:${side}px`;
+  v.min = side / Math.min(v.nw, v.nh);   // the photo always covers the frame
+  v.max = v.min * 6;
+  v.s = v.min;
+  centreCrop();
+}
+function centreCrop() {
+  const v = crop.view;
+  v.tx = v.F.x + v.F.side / 2 - (v.nw * v.s) / 2;
+  v.ty = v.F.y + v.F.side / 2 - (v.nh * v.s) / 2;
+}
+function zoomCrop(k, px, py) {
+  const v = crop.view;
+  const s2 = Math.min(v.max, Math.max(v.min, v.s * k));
+  const k2 = s2 / v.s;
+  v.tx = px - (px - v.tx) * k2; v.ty = py - (py - v.ty) * k2; v.s = s2;
+}
+/** Keep the photo covering the whole frame, so there is never a gap inside it. */
+function clampCrop() {
+  const v = crop.view, F = v.F;
+  v.tx = Math.min(F.x, Math.max(F.x + F.side - v.nw * v.s, v.tx));
+  v.ty = Math.min(F.y, Math.max(F.y + F.side - v.nh * v.s, v.ty));
+}
+
+async function useCrop() {
+  const v = crop.view, img = crop.img, f = form;
+  if (!v || crop.saving) return;
+  crop.saving = true;
+  const btn = $('#crop-use');
+  btn.disabled = true; btn.lastChild.textContent = 'Saving…';
   try {
-    const { photo, thumb } = await processPhoto(file);
-    if (form !== f) return;
-    f.photo = photo; f.thumb = thumb; f.preview = null;
+    const side = v.F.side / v.s;
+    const sx = Math.min(Math.max((v.F.x - v.tx) / v.s, 0), v.nw - side);
+    const sy = Math.min(Math.max((v.F.y - v.ty) / v.s, 0), v.nh - side);
+    const out = Math.max(1, Math.round(Math.min(side, MAX_EDGE)));
+    const canvas = document.createElement('canvas');
+    canvas.width = out; canvas.height = out;
+    canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, out, out);
+    const photo = await scaleToJpeg(canvas, MAX_EDGE, JPEG_QUALITY);
+    const thumb = await scaleToJpeg(canvas, THUMB_EDGE, 0.75);
+    if (!crop.open) return;
+    if (f && form === f) { f.photo = photo; f.thumb = thumb; f.preview = null; f.busy = false; renderPhotoArea(); }
+    // Close the crop screen, and the camera underneath it if the photo came from its Library button.
+    leaveLayers(1 + (cam.open ? 1 : 0));
   } catch (e) {
-    if (form === f) toast(e.message || 'That photo could not be used.');
+    console.error(e);
+    toast('That photo could not be used. Please try another.');
+    crop.saving = false; btn.disabled = false; btn.lastChild.textContent = 'Use photo';
   }
-  if (form !== f) return;
-  f.busy = false;
-  renderPhotoArea();
+}
+
+function closeCropper() {
+  if (!crop.open) return;
+  crop.open = false; crop.view = null; crop.img = null; crop.apply = null;
+  if (crop.url) { URL.revokeObjectURL(crop.url); crop.url = null; }
+  const el = $('#cropper');
+  el.hidden = true; el.innerHTML = '';
+  refreshInert();
+}
+function dismissCropper() {
+  if (!crop.open) return;
+  if (history.state && history.state.layer === 'crop') history.back();
+  else closeCropper();
+}
+/** Step back through `n` layers in one go. */
+function leaveLayers(n) {
+  if (history.state && history.state.layer) history.go(-n);
+  else { closeCropper(); closeCamera(); }
 }
 
 /* ---------- In-app camera ----------
@@ -496,10 +674,10 @@ async function openCamera() {
   const el = $('#camera');
   el.innerHTML = cameraHTML();
   el.hidden = false;
-  $('#main').inert = true; $('#overlay').inert = true;
+  refreshInert();
   // Own history entry, so the phone's back gesture closes the camera and not the form behind it.
   const d = (history.state && history.state.d) || 0;
-  history.pushState({ d: d + 1, cam: true }, '', location.href);
+  history.pushState({ d: d + 1, layer: 'cam' }, '', location.href);
   setCamMode('live');
   $('#cam-shutter').focus();
   try { await startStream(); } catch (e) { if (cam.open) showCameraError(e); }
@@ -615,12 +793,11 @@ function closeCamera() {
   const el = $('#camera');
   el.hidden = true;
   el.innerHTML = '';
-  $('#overlay').inert = false;
-  $('#main').inert = !$('#overlay').hidden;
+  refreshInert();
 }
 function dismissCamera() {
   if (!cam.open) return;
-  if (history.state && history.state.cam) history.back();   // popstate closes it
+  if (history.state && history.state.layer === 'cam') history.back();   // popstate closes it
   else closeCamera();
 }
 
@@ -1114,9 +1291,10 @@ const actions = {
 };
 
 document.addEventListener('click', (e) => {
-  const el = e.target.closest('[data-go],[data-act],[data-tab],[data-sort],[data-cam]');
+  const el = e.target.closest('[data-go],[data-act],[data-tab],[data-sort],[data-cam],[data-crop]');
   if (!el) return;
   if (el.dataset.cam) return cameraAction(el.dataset.cam);
+  if (el.dataset.crop) return el.dataset.crop === 'use' ? useCrop() : dismissCropper();
   if (el.dataset.go) return go(el.dataset.go);
   if (el.dataset.tab) return go(`#/${el.dataset.tab}`, true);
   if (el.dataset.sort) return setSort(el.dataset.sort);
@@ -1147,12 +1325,16 @@ document.addEventListener('change', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (cam.open) dismissCamera();
+  if (crop.open) dismissCropper();
+  else if (cam.open) dismissCamera();
   else if (state.closeSheet) state.closeSheet();
   else if (!$('#overlay').hidden) back('#/tried');
 });
 
-window.addEventListener('popstate', () => { if (cam.open) closeCamera(); else route(); });
+window.addEventListener('popstate', () => {
+  if (crop.open || cam.open) syncLayers(history.state);   // closing a layer must not rebuild the form behind it
+  else route();
+});
 // Android stops the camera when you switch apps; start it again when you come back.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && cam.open && cam.mode === 'live' && (!cam.stream || cam.stream.getTracks().some((t) => t.readyState === 'ended'))) {

@@ -33,7 +33,7 @@ It then opens full screen with its own cheese wedge icon, and keeps working with
 
 **Take photo** opens a camera inside the app, with a square frame. What is inside the frame is exactly what gets saved, so nothing is cut off afterwards. Tap the big round button to take the shot, then **Use photo** or **Retake**. The buttons at the sides open your photo library and flip between the front and back cameras. If your phone has a flash light, a lightning button appears at the top.
 
-**Choose photo** opens your photo library. Those photos are kept whole, not cropped.
+**Choose photo** opens your photo library, and then a crop screen. A square frame sits over your photo: drag the photo to choose the part you want, pinch to zoom (or double-tap), and tap **Use photo**. The dark area outside the frame is what gets cut off. Your original photo is never changed.
 
 The first time you take a photo, Chrome asks to allow the camera. If you say no, the app tells you and offers your phone's own camera app instead. Photos are shrunk to about 1280px before saving.
 
