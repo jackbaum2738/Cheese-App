@@ -139,7 +139,7 @@ function loadImage(blob) {
   });
 }
 function scaleToJpeg(img, maxEdge, quality) {
-  const w = img.naturalWidth, h = img.naturalHeight;
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;   // images or canvases
   const k = Math.min(1, maxEdge / Math.max(w, h));
   const cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
   const canvas = document.createElement('canvas');
@@ -380,7 +380,7 @@ function detailPage(r) {
   if (r.price != null) rows.push(['Price', fmtPrice(r.price)]);
   return `<div class="detail" style="display:contents">
     <div class="scroll">
-      <div class="hero">${hero}
+      <div class="hero${r.photo ? ' has-photo' : ''}">${hero}
         <button class="iconbtn l" data-act="back" data-fallback="#/tried" aria-label="Back">${icon('back')}</button>
         <button class="iconbtn r" data-go="#/tried/${enc(r.id)}/edit" aria-label="Edit">${icon('edit')}</button>
       </div>
@@ -415,16 +415,17 @@ function photoAreaHTML() {
   if (form.busy) return '<div class="photo-pick" aria-busy="true">Processing photo…</div>';
   if (!form.photo) {
     return `<div class="photo-row">
-      <button type="button" class="photo-pick" data-act="take-photo">${icon('camera')}Take photo</button>
+      <button type="button" class="photo-pick go" data-act="take-photo">${icon('camera')}Take photo</button>
       <button type="button" class="photo-pick" data-act="choose-photo">${icon('image')}Choose photo</button>
     </div>`;
   }
   if (!form.preview) form.preview = bags.overlay.url(form.photo);
-  return `<div class="photo-has"><img src="${form.preview}" alt="Your photo">
-    <div class="chips">
-      <button type="button" data-act="take-photo">${icon('camera')}Retake</button>
-      <button type="button" data-act="choose-photo">${icon('image')}Choose</button>
-      <button type="button" data-act="remove-photo">Remove</button>
+  return `<div class="photo-set">
+    <div class="pic"><img src="${form.preview}" alt="Your photo"></div>
+    <div class="acts">
+      <button type="button" class="chipbtn" data-act="take-photo">${icon('camera')}Retake</button>
+      <button type="button" class="chipbtn" data-act="choose-photo">${icon('image')}Choose</button>
+      <button type="button" class="chipbtn muted" data-act="remove-photo">Remove</button>
     </div></div>`;
 }
 function renderPhotoArea() {
@@ -436,6 +437,7 @@ async function handlePhotoChosen(input) {
   input.value = '';
   const f = form;
   if (!file || !f) return;
+  dismissCamera();
   f.busy = true;
   renderPhotoArea();
   try {
@@ -448,6 +450,203 @@ async function handlePhotoChosen(input) {
   if (form !== f) return;
   f.busy = false;
   renderPhotoArea();
+}
+
+/* ---------- In-app camera ----------
+   A full-screen camera with a square frame, so what you frame is exactly what is saved. */
+
+const cam = { open: false, stream: null, facing: 'environment', torch: false, shot: null, mode: 'live' };
+
+function cameraHTML() {
+  return `<video id="cam-video" class="cam-video" playsinline muted autoplay></video>
+    <div class="cam-frame" id="cam-frame"></div>
+    <div class="cam-flash" id="cam-flash"></div>
+    <div class="cam-top">
+      <button type="button" class="cam-btn" data-cam="close" aria-label="Close camera">${icon('x')}</button>
+      <button type="button" class="cam-btn" data-cam="torch" id="cam-torch" aria-label="Flash" aria-pressed="false" hidden>${icon('bolt')}</button>
+    </div>
+    <p class="cam-hint" id="cam-hint">Fit the cheese inside the frame</p>
+    <div class="cam-controls" id="cam-live">
+      <button type="button" class="cam-lib" data-cam="library"><span>${icon('image')}</span>Library</button>
+      <button type="button" class="cam-shutter" data-cam="shoot" id="cam-shutter" aria-label="Take photo"><i></i></button>
+      <button type="button" class="cam-btn" data-cam="flip" id="cam-flip" aria-label="Flip camera">${icon('flip')}</button>
+    </div>
+    <div class="cam-review" id="cam-review" hidden>
+      <img id="cam-shot" alt="The photo you just took">
+      <p>Looks good?</p>
+      <div class="cam-actions">
+        <button type="button" class="cam-act" data-cam="retake">${icon('retake')}Retake</button>
+        <button type="button" class="cam-act primary" data-cam="use" id="cam-use">${icon('check')}Use photo</button>
+      </div>
+    </div>
+    <div class="cam-error" id="cam-error" hidden></div>`;
+}
+
+function setCamMode(mode) {
+  cam.mode = mode;
+  $('#cam-live').hidden = mode !== 'live';
+  $('#cam-hint').hidden = mode !== 'live';
+  $('#cam-review').hidden = mode !== 'review';
+  $('#cam-error').hidden = mode !== 'error';
+}
+
+async function openCamera() {
+  if (cam.open || !form) return;
+  cam.open = true; cam.shot = null; cam.torch = false;
+  const el = $('#camera');
+  el.innerHTML = cameraHTML();
+  el.hidden = false;
+  $('#main').inert = true; $('#overlay').inert = true;
+  // Own history entry, so the phone's back gesture closes the camera and not the form behind it.
+  const d = (history.state && history.state.d) || 0;
+  history.pushState({ d: d + 1, cam: true }, '', location.href);
+  setCamMode('live');
+  $('#cam-shutter').focus();
+  try { await startStream(); } catch (e) { if (cam.open) showCameraError(e); }
+}
+
+function stopStream() {
+  if (cam.stream) { cam.stream.getTracks().forEach((t) => t.stop()); cam.stream = null; }
+  const v = $('#cam-video');
+  if (v) v.srcObject = null;
+}
+
+async function startStream() {
+  stopStream();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw Object.assign(new Error('Camera not supported'), { name: 'NotSupportedError' });
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: cam.facing }, width: { ideal: 2560 }, height: { ideal: 1440 } },
+  });
+  if (!cam.open) { stream.getTracks().forEach((t) => t.stop()); return; }   // closed while the permission prompt was up
+  cam.stream = stream;
+  const v = $('#cam-video');
+  v.srcObject = stream;
+  v.style.transform = cam.facing === 'user' ? 'scaleX(-1)' : '';   // selfie view is mirrored, the saved photo is not
+  await v.play().catch(() => {});
+  const track = stream.getVideoTracks()[0];
+  const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+  cam.torch = false;
+  const torch = $('#cam-torch');
+  torch.hidden = !caps.torch;
+  torch.setAttribute('aria-pressed', 'false');
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    $('#cam-flip').style.visibility = devices.filter((d) => d.kind === 'videoinput').length > 1 ? '' : 'hidden';
+  } catch (e) { /* keep the button */ }
+}
+
+function showCameraError(e) {
+  const name = e && e.name;
+  let title = 'Camera is turned off';
+  let body = 'Cheese isn’t allowed to use your camera. In Chrome, tap the lock icon next to the address, then Permissions, and allow Camera.';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError' || name === 'DevicesNotFoundError') {
+    title = 'No camera found';
+    body = 'This phone didn’t report a camera that Cheese can use.';
+  } else if (name === 'NotReadableError' || name === 'AbortError') {
+    title = 'Camera is busy';
+    body = 'Another app may be using the camera. Close it and try again.';
+  } else if (name === 'NotSupportedError' || name === 'SecurityError') {
+    title = 'Camera isn’t available here';
+    body = 'This browser can’t open the camera inside the app.';
+  }
+  $('#cam-error').innerHTML = `<div class="cam-sheet">
+    <div class="grab"></div>
+    <h3>${title}</h3>
+    <p>${body} You can still use your phone’s camera app, or pick a photo from your library.</p>
+    <button type="button" class="cam-act primary" data-cam="native">${icon('camera')}Use phone camera app</button>
+    <button type="button" class="cam-act" data-cam="library">${icon('image')}Choose from library</button>
+    <button type="button" class="cam-act quiet" data-cam="close">Close</button>
+  </div>`;
+  setCamMode('error');
+}
+
+/** Copy the part of the live picture inside the square frame onto a canvas. */
+function cropToFrame(video, frame) {
+  const vr = video.getBoundingClientRect(), fr = frame.getBoundingClientRect();
+  const vw = video.videoWidth, vh = video.videoHeight;
+  // The video fills the screen and is cut to fit (object-fit: cover); work out where the frame lands in the real picture.
+  const scale = Math.max(vr.width / vw, vr.height / vh);
+  const offX = vr.left + (vr.width - vw * scale) / 2;
+  const offY = vr.top + (vr.height - vh * scale) / 2;
+  const side = Math.min(fr.width / scale, vw, vh);
+  const sx = Math.min(Math.max((fr.left - offX) / scale, 0), vw - side);
+  const sy = Math.min(Math.max((fr.top - offY) / scale, 0), vh - side);
+  const out = Math.max(1, Math.round(Math.min(side, MAX_EDGE)));
+  const canvas = document.createElement('canvas');
+  canvas.width = out; canvas.height = out;
+  canvas.getContext('2d').drawImage(video, sx, sy, side, side, 0, 0, out, out);
+  return canvas;
+}
+
+async function takeShot() {
+  const v = $('#cam-video'), btn = $('#cam-shutter');
+  if (!cam.stream || !v.videoWidth || btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const canvas = cropToFrame(v, $('#cam-frame'));
+    const photo = await scaleToJpeg(canvas, MAX_EDGE, JPEG_QUALITY);
+    const thumb = await scaleToJpeg(canvas, THUMB_EDGE, 0.75);
+    if (!cam.open) return;
+    cam.shot = { photo, thumb, url: URL.createObjectURL(photo) };
+    $('#cam-shot').src = cam.shot.url;
+    const flash = $('#cam-flash');
+    flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
+    setCamMode('review');
+    $('#cam-use').focus();
+  } catch (e) {
+    console.error(e);
+    toast('That photo could not be taken. Please try again.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function discardShot() {
+  if (cam.shot) { URL.revokeObjectURL(cam.shot.url); cam.shot = null; }
+}
+function closeCamera() {
+  if (!cam.open) return;
+  cam.open = false;
+  stopStream();
+  discardShot();
+  const el = $('#camera');
+  el.hidden = true;
+  el.innerHTML = '';
+  $('#overlay').inert = false;
+  $('#main').inert = !$('#overlay').hidden;
+}
+function dismissCamera() {
+  if (!cam.open) return;
+  if (history.state && history.state.cam) history.back();   // popstate closes it
+  else closeCamera();
+}
+
+async function cameraAction(act) {
+  if (act === 'close') return dismissCamera();
+  if (act === 'shoot') return takeShot();
+  if (act === 'library') return $('#photo-input').click();
+  if (act === 'native') return $('#camera-input').click();
+  if (act === 'retake') { discardShot(); setCamMode('live'); return; }
+  if (act === 'use') {
+    const f = form;
+    if (f && cam.shot) { f.photo = cam.shot.photo; f.thumb = cam.shot.thumb; f.preview = null; f.busy = false; renderPhotoArea(); }
+    return dismissCamera();
+  }
+  if (act === 'flip') {
+    cam.facing = cam.facing === 'environment' ? 'user' : 'environment';
+    try { await startStream(); } catch (e) { if (cam.open) showCameraError(e); }
+    return;
+  }
+  if (act === 'torch') {
+    const track = cam.stream && cam.stream.getVideoTracks()[0];
+    if (!track) return;
+    const want = !cam.torch;
+    try { await track.applyConstraints({ advanced: [{ torch: want }] }); cam.torch = want; } catch (e) { return; }
+    $('#cam-torch').setAttribute('aria-pressed', String(cam.torch));
+  }
 }
 
 function sheetBar(title, cancelFallback, withSave = true) {
@@ -890,7 +1089,7 @@ async function importBackupFile(file) {
 
 const actions = {
   back: (el) => back(el.dataset.fallback || '#/tried'),
-  'take-photo': () => $('#camera-input').click(),
+  'take-photo': () => openCamera(),
   'choose-photo': () => $('#photo-input').click(),
   'remove-photo': () => { if (form) { form.photo = null; form.thumb = null; form.preview = null; renderPhotoArea(); } },
   rate: (el) => {
@@ -915,8 +1114,9 @@ const actions = {
 };
 
 document.addEventListener('click', (e) => {
-  const el = e.target.closest('[data-go],[data-act],[data-tab],[data-sort]');
+  const el = e.target.closest('[data-go],[data-act],[data-tab],[data-sort],[data-cam]');
   if (!el) return;
+  if (el.dataset.cam) return cameraAction(el.dataset.cam);
   if (el.dataset.go) return go(el.dataset.go);
   if (el.dataset.tab) return go(`#/${el.dataset.tab}`, true);
   if (el.dataset.sort) return setSort(el.dataset.sort);
@@ -947,11 +1147,18 @@ document.addEventListener('change', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (state.closeSheet) state.closeSheet();
+  if (cam.open) dismissCamera();
+  else if (state.closeSheet) state.closeSheet();
   else if (!$('#overlay').hidden) back('#/tried');
 });
 
-window.addEventListener('popstate', route);
+window.addEventListener('popstate', () => { if (cam.open) closeCamera(); else route(); });
+// Android stops the camera when you switch apps; start it again when you come back.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && cam.open && cam.mode === 'live' && (!cam.stream || cam.stream.getTracks().some((t) => t.readyState === 'ended'))) {
+    startStream().catch((e) => { if (cam.open) showCameraError(e); });
+  }
+});
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   state.installPrompt = e;
