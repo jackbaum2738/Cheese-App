@@ -724,30 +724,90 @@ function downloadFile(file) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+/** A copy of the file the browser agrees to share, or null if sharing files isn't possible here. */
+function shareableFile(file) {
+  if (!navigator.share || !navigator.canShare) return null;
+  // Some phones refuse JSON files but accept the same file labelled as plain text.
+  const candidates = [file, new File([file], file.name, { type: 'text/plain' })];
+  return candidates.find((f) => { try { return navigator.canShare({ files: [f] }); } catch (e) { return false; } }) || null;
+}
+
+async function markBackedUp(message) {
+  await setMeta('lastExport', Date.now());
+  toast(message);
+  if (location.hash === '#/settings') showOverlay(settingsPage);
+}
+
+/** "Backup ready" sheet. Sharing has to start straight from a tap, so the file is built before this opens. */
+function backupSheet(file) {
+  const root = $('#sheet-root');
+  const shareable = shareableFile(file);
+  root.innerHTML = `<div class="scrim" data-sheet="close"></div>
+    <div class="bsheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="grab"></div>
+      <h3 id="sheet-title">Backup ready</h3>
+      <p><b>${esc(file.name)}</b><br>${esc(fmtBytes(file.size))}</p>
+      ${shareable
+        ? '<p>Tap Share or save, then choose <b>Save to Files</b>, Google Drive or another safe place.</p><button class="btn primary" data-sheet="share">Share or save…</button>'
+        : '<p>This browser can’t open the share menu, so download the file instead.</p>'}
+      <button class="btn ${shareable ? 'secondary' : 'primary'}" data-sheet="download">Download file</button>
+      <button class="btn link" data-sheet="close" id="sheet-cancel">Close</button>
+    </div>`;
+  root.hidden = false;
+  const close = () => {
+    root.hidden = true; root.innerHTML = ''; root.onclick = null; state.closeSheet = null;
+    saving = false;
+    if (updatePending) applyUpdate();
+  };
+  state.closeSheet = close;
+  root.onclick = (e) => {
+    const b = e.target.closest('[data-sheet]');
+    if (!b) return;
+    if (b.dataset.sheet === 'share') {
+      // Called straight from the tap, with no waiting first, or phones refuse to open the menu.
+      navigator.share({ files: [shareable], title: 'Cheese backup' })
+        .then(() => { close(); markBackedUp('Backup saved'); })
+        .catch((err) => {
+          if (err && err.name === 'AbortError') return;   // you closed the menu without saving
+          toast('The share menu would not open. Use Download file.');
+        });
+    } else if (b.dataset.sheet === 'download') {
+      downloadFile(file);
+      close();
+      markBackedUp('Backup downloaded');
+    } else {
+      close();
+    }
+  };
+  $('#sheet-cancel').focus();
+}
+
 async function exportBackup(downloadOnly) {
-  saving = true;
+  saving = true;   // blocks a pending update-reload until the backup is done
   const btns = document.querySelectorAll('[data-act="export"],[data-act="export-download"]');
   btns.forEach((b) => (b.disabled = true));
+  let sheetOpen = false;
   try {
+    toast('Preparing backup…');
     const json = JSON.stringify(await buildBackup());
     const file = new File([json], `cheese-backup-${todayISO()}.json`, { type: 'application/json' });
-    let shared = false;
-    // On phones the share sheet lets you save to Files / Drive. Fall back to a plain download.
-    if (!downloadOnly && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: 'Cheese backup' }); shared = true; }
-      catch (e) { if (e.name === 'AbortError') return; }
+    if (downloadOnly) {
+      downloadFile(file);
+      await markBackedUp('Backup downloaded');
+    } else {
+      $('#toast').classList.remove('show');
+      backupSheet(file);
+      sheetOpen = true;   // the sheet releases the update block when it closes
     }
-    if (!shared) downloadFile(file);
-    await setMeta('lastExport', Date.now());
-    toast(shared ? 'Backup ready' : 'Backup downloaded');
-    if (location.hash === '#/settings') showOverlay(settingsPage);
   } catch (e) {
     console.error(e);
     toast('Could not create the backup.');
   } finally {
     btns.forEach((b) => (b.disabled = false));
-    saving = false;
-    if (updatePending) applyUpdate();
+    if (!sheetOpen) {
+      saving = false;
+      if (updatePending) applyUpdate();
+    }
   }
 }
 
