@@ -29,6 +29,14 @@ Open that address on your phone.
 
 It then opens full screen with its own cheese wedge icon, and keeps working without signal.
 
+## Photos
+
+**Take photo** opens a camera inside the app, with a square frame. What is inside the frame is exactly what gets saved, so nothing is cut off afterwards. Tap the big round button to take the shot, then **Use photo** or **Retake**. The buttons at the sides open your photo library and flip between the front and back cameras. If your phone has a flash light, a lightning button appears at the top.
+
+**Choose photo** opens your photo library. Those photos are kept whole, not cropped.
+
+The first time you take a photo, Chrome asks to allow the camera. If you say no, the app tells you and offers your phone's own camera app instead. Photos are shrunk to about 1280px before saving.
+
 ## Backups
 
 Your cheeses live only in your phone's browser storage. If you clear site data, delete the app, or lose the phone, they are gone. Back up now and then.
