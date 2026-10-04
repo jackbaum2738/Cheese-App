@@ -33,9 +33,9 @@ It then opens full screen with its own cheese wedge icon, and keeps working with
 
 Your cheeses live only in your phone's browser storage. If you clear site data, delete the app, or lose the phone, they are gone. Back up now and then.
 
-**Export:** Settings (gear icon) → **Export backup**. This makes one file, `cheese-backup-YYYY-MM-DD.json`, with every entry and every photo (photos are stored inside as base64 text). A **Backup ready** sheet opens. Tap **Share or save…**, then choose **Save to Files**, iCloud Drive, Google Drive or similar. If the share menu isn't available, tap **Download file**, or use **Download backup as a file instead** on the Settings page.
+**Export:** Settings (gear icon) → **Export backup**. This makes one file with every entry and every photo (photos are stored inside as base64 text). A **Backup ready** sheet opens. Tap **Share or save…**, then choose **Save to Files**, iCloud Drive, Google Drive or similar. The shared copy is called `cheese-backup-YYYY-MM-DD.txt`, because Android refuses to share `.json` files; the contents are identical. If the share menu isn't available, tap **Download file** to save `cheese-backup-YYYY-MM-DD.json` instead.
 
-**Import:** Settings → **Import backup**, then pick the file. You are shown what is in it and asked to confirm. Importing **replaces everything** currently in the app. Files that aren't Cheese backups are rejected and nothing changes.
+**Import:** Settings → **Import backup**, then pick the file (the `.txt` or the `.json`). You are shown what is in it and asked to confirm. Importing **replaces everything** currently in the app. Files that aren't Cheese backups are rejected and nothing changes.
 
 Settings shows how long ago your last backup was and turns yellow after 14 days. The app also asks the browser to protect its storage from being cleared automatically; Settings shows whether that was granted. Adding the app to your home screen makes that more likely.
 

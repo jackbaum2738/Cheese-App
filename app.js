@@ -665,9 +665,8 @@ async function settingsPage() {
         <div><b>${headline}</b>Your cheeses and photos are only stored on this phone. Export a backup now and then, and save it to Files, iCloud Drive or Google Drive.</div></div>
       <button class="btn primary" data-act="export">${icon('download')}Export backup</button>
       <button class="btn secondary" data-act="import">${icon('upload')}Import backup</button>
-      <input id="import-input" type="file" accept="application/json,.json" hidden>
+      <input id="import-input" type="file" accept="application/json,.json,text/plain,.txt" hidden>
       <div class="hint center">Importing replaces everything currently in the app.</div>
-      <button class="btn link" data-act="export-download">Download backup as a file instead</button>
       <div class="section-h">On this phone</div>
       <div class="list">
         <div><span>Storage protection</span><span class="${persisted ? 'ok' : ''}">${persisted ? 'On' : 'Not guaranteed'}</span></div>
@@ -724,12 +723,12 @@ function downloadFile(file) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-/** A copy of the file the browser agrees to share, or null if sharing files isn't possible here. */
+/** A copy of the backup that phones allow sharing, or null if sharing files isn't possible here.
+    Android Chrome refuses .json files, so the shared copy is a plain text file with the same contents. */
 function shareableFile(file) {
   if (!navigator.share || !navigator.canShare) return null;
-  // Some phones refuse JSON files but accept the same file labelled as plain text.
-  const candidates = [file, new File([file], file.name, { type: 'text/plain' })];
-  return candidates.find((f) => { try { return navigator.canShare({ files: [f] }); } catch (e) { return false; } }) || null;
+  const copy = new File([file], file.name.replace(/\.json$/, '.txt'), { type: 'text/plain' });
+  try { return navigator.canShare({ files: [copy] }) ? copy : null; } catch (e) { return null; }
 }
 
 async function markBackedUp(message) {
@@ -748,7 +747,7 @@ function backupSheet(file) {
       <h3 id="sheet-title">Backup ready</h3>
       <p><b>${esc(file.name)}</b><br>${esc(fmtBytes(file.size))}</p>
       ${shareable
-        ? '<p>Tap Share or save, then choose <b>Save to Files</b>, Google Drive or another safe place.</p><button class="btn primary" data-sheet="share">Share or save…</button>'
+        ? '<p>Tap Share or save, then choose <b>Save to Files</b>, Google Drive or another safe place. It is shared as a text file, and importing accepts it.</p><button class="btn primary" data-sheet="share">Share or save…</button>'
         : '<p>This browser can’t open the share menu, so download the file instead.</p>'}
       <button class="btn ${shareable ? 'secondary' : 'primary'}" data-sheet="download">Download file</button>
       <button class="btn link" data-sheet="close" id="sheet-cancel">Close</button>
@@ -769,7 +768,7 @@ function backupSheet(file) {
         .then(() => { close(); markBackedUp('Backup saved'); })
         .catch((err) => {
           if (err && err.name === 'AbortError') return;   // you closed the menu without saving
-          toast('The share menu would not open. Use Download file.');
+          toast(`The share menu would not open (${(err && err.name) || 'error'}). Use Download file.`);
         });
     } else if (b.dataset.sheet === 'download') {
       downloadFile(file);
@@ -782,23 +781,18 @@ function backupSheet(file) {
   $('#sheet-cancel').focus();
 }
 
-async function exportBackup(downloadOnly) {
+async function exportBackup() {
   saving = true;   // blocks a pending update-reload until the backup is done
-  const btns = document.querySelectorAll('[data-act="export"],[data-act="export-download"]');
+  const btns = document.querySelectorAll('[data-act="export"]');
   btns.forEach((b) => (b.disabled = true));
   let sheetOpen = false;
   try {
     toast('Preparing backup…');
     const json = JSON.stringify(await buildBackup());
     const file = new File([json], `cheese-backup-${todayISO()}.json`, { type: 'application/json' });
-    if (downloadOnly) {
-      downloadFile(file);
-      await markBackedUp('Backup downloaded');
-    } else {
-      $('#toast').classList.remove('show');
-      backupSheet(file);
-      sheetOpen = true;   // the sheet releases the update block when it closes
-    }
+    $('#toast').classList.remove('show');
+    backupSheet(file);
+    sheetOpen = true;   // the sheet releases the update block when it closes
   } catch (e) {
     console.error(e);
     toast('Could not create the backup.');
@@ -907,8 +901,7 @@ const actions = {
   },
   'delete-tried': (el) => deleteTried(el.dataset.id),
   'delete-wish': (el) => deleteWish(el.dataset.id),
-  export: () => exportBackup(false),
-  'export-download': () => exportBackup(true),
+  export: () => exportBackup(),
   import: () => $('#import-input').click(),
   install: async () => {
     const p = state.installPrompt;
